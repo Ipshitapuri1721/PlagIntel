@@ -48,12 +48,26 @@ The core of PlagIntel is a **5-component weighted pipeline** in [`plagiarism_eng
 |---|---|---|
 | Exact phrase match | 30% | Sliding-window phrase matching (min 5 words) |
 | Sentence-level similarity | 25% | TF-IDF cosine similarity per sentence pair (threshold 0.75) |
-| Semantic similarity | 25% | `sentence-transformers` all-MiniLM-L6-v2 (optional — falls back to TF-IDF) |
+| Semantic similarity (LSA) | 25% | TF-IDF (word 1–2-grams + char 3–6-grams) → SVD 100 dims → cosine |
 | Writing-style mismatch | 10% | 4 style features vs student's past submissions |
 | Teacher feedback weight | 10% | Past teacher decisions at similar risk scores nudge the final score |
 
-**Final score** = weighted sum of all five components.  
+**Final score** = weighted sum of all five components.
 **TF-IDF baseline** is also shown separately for transparency.
+
+### Why LSA instead of sentence-transformers?
+
+The semantic slot now uses **Latent Semantic Analysis** — a pure scikit-learn pipeline that is already available through the existing `scikit-learn` + `scipy` dependencies:
+
+| Property | LSA (this project) | sentence-transformers |
+|---|---|---|
+| Model download | ❌ None | ✅ ~80 MB on first run |
+| RAM usage | ~10 MB | ~500 MB+ |
+| Speed per pair | < 5 ms | 50–500 ms |
+| Segfault risk | None | Possible (PyTorch/tokenizers) |
+| Streamlit Cloud deploy | ✅ Works out of the box | ⚠️ May timeout or OOM |
+| Paraphrase detection | ✅ Topic-level via SVD | ✅ Sentence-level |
+| Always available | ✅ Yes | ⚠️ Optional install |
 
 > ⚠️ **AI-Assisted Writing Likelihood** is a heuristic estimate only. It is not a definitive determination of AI authorship.
 
@@ -133,8 +147,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> `sentence-transformers` will download the `all-MiniLM-L6-v2` model (~80 MB) on first run.  
-> If you skip it, the semantic similarity component falls back to TF-IDF automatically.
+> All dependencies install instantly — no model downloads, no internet required beyond watsonx.ai calls.
 
 ### 4. Configure IBM watsonx.ai credentials
 
@@ -210,15 +223,16 @@ Open [http://localhost:8501](http://localhost:8501) in your browser.
 | Package | Version | Purpose |
 |---|---|---|
 | `streamlit` | 1.35.0 | Web UI framework |
-| `pandas` | 2.2.2 | Data handling (CSV I/O) |
-| `scikit-learn` | 1.4.2 | TF-IDF vectoriser + cosine similarity |
+| `pandas` | 2.1.4 | Data handling (CSV I/O) |
+| `numpy` | 1.26.4 | Numerical operations |
+| `scikit-learn` | 1.4.2 | TF-IDF vectoriser, TruncatedSVD (LSA), cosine similarity |
+| `scipy` | 1.13.0 | Sparse matrix support for the LSA pipeline |
 | `ibm-watsonx-ai` | 1.0.10 | IBM Granite API client |
 | `python-dotenv` | 1.0.1 | `.env` file loader |
 | `PyMuPDF` | 1.24.5 | PDF text extraction |
 | `python-docx` | 1.1.2 | DOCX text extraction |
 | `plotly` | 5.22.0 | Interactive charts (Dashboard + Analytics) |
 | `reportlab` | 4.2.2 | PDF report generation |
-| `sentence-transformers` | 2.7.0 | Semantic similarity (optional — falls back to TF-IDF) |
 
 ---
 
@@ -227,7 +241,6 @@ Open [http://localhost:8501](http://localhost:8501) in your browser.
 | Scenario | Fallback |
 |---|---|
 | No watsonx.ai credentials | Local heuristic explanation generated from scores |
-| `sentence-transformers` not installed | Semantic slot uses TF-IDF cosine similarity |
 | `reportlab` not installed | PDF generated via Python stdlib binary writer |
 | Empty `analysis_history.csv` | Dashboard and Analytics tabs show zero-state gracefully |
 
