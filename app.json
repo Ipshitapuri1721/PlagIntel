@@ -1,0 +1,7 @@
+{
+  "name": "AI-Driven Plagiarism Intelligence System",
+  "description": "An AI-powered plagiarism detection system using IBM Granite and watsonx.ai.",
+  "version": "1.0.0",
+  "type": "python",
+  "entrypoint": "app.py"
+}
