@@ -1,7 +1,12 @@
 # plagiarism_engine.py
 # Handles similarity comparison between a new submission and stored submissions.
 # ENHANCED: hybrid detection engine (exact phrases + sentence similarity +
-# semantic embeddings + writing-style analysis + feedback weighting).
+# lightweight paraphrase similarity + writing-style analysis + feedback weighting).
+#
+# NOTE: Semantic similarity uses a deployment-safe scikit-learn implementation
+# (TF-IDF word n-grams + character n-grams + cosine similarity).
+# No torch, transformers, sentence-transformers, or CUDA packages are used.
+# This is labelled "Lightweight paraphrase similarity" throughout.
 
 import os
 import re
@@ -468,27 +473,57 @@ def _sentence_similarity_score(text_a: str, text_b: str,
     return round(flagged / len(sents_a), 4)
 
 
-# ── Semantic similarity (sentence-transformers, optional) ────────────────────
+# ── Lightweight paraphrase similarity (deployment-safe, CPU-only) ─────────────
+#
+# This is a "deployment-safe semantic approximation" using only scikit-learn.
+# It does NOT use torch, transformers, sentence-transformers, or any GPU/CUDA
+# packages. It captures paraphrase and morphological similarity by combining:
+#   • Word-level TF-IDF n-grams (1, 2) — 60% weight
+#   • Character-level TF-IDF n-grams (3, 5) — 40% weight
+#   → Cosine similarity of the resulting vectors
+#
+# Label: "Lightweight paraphrase similarity"
 
 def _semantic_similarity_score(text_a: str, text_b: str) -> float:
     """
-    Compute semantic (embedding-based) cosine similarity between *text_a* and
-    *text_b* using the all-MiniLM-L6-v2 sentence-transformer model.
+    Compute lightweight paraphrase similarity between *text_a* and *text_b*.
 
-    Returns 0.0 gracefully when sentence-transformers is not installed so the
-    rest of the hybrid engine still works without the optional dependency.
+    Uses a deployment-safe semantic approximation — pure scikit-learn only:
+      - Word TF-IDF n-grams (1, 2) with cosine similarity  → 60% weight
+      - Character TF-IDF n-grams (3, 5) with cosine similarity → 40% weight
+
+    No torch, transformers, sentence-transformers, scipy, or CUDA required.
+    Runs on any CPU environment including Streamlit Community Cloud.
+    Returns 0.0 on any error instead of crashing.
     """
+    if not text_a.strip() or not text_b.strip():
+        return 0.0
+
     try:
-        from sentence_transformers import SentenceTransformer
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
-        emb_a, emb_b = _model.encode([text_a, text_b])
-        # Manual cosine similarity (avoids importing scipy)
-        dot   = sum(a * b for a, b in zip(emb_a, emb_b))
-        norm  = (
-            math.sqrt(sum(x * x for x in emb_a)) *
-            math.sqrt(sum(x * x for x in emb_b))
+        word_vectorizer = TfidfVectorizer(
+            stop_words="english",
+            ngram_range=(1, 2),
+            min_df=1,
         )
-        return round(dot / norm, 4) if norm > 0 else 0.0
+        char_vectorizer = TfidfVectorizer(
+            analyzer="char_wb",
+            ngram_range=(3, 5),
+            min_df=1,
+        )
+
+        word_matrix = word_vectorizer.fit_transform([text_a, text_b])
+        char_matrix = char_vectorizer.fit_transform([text_a, text_b])
+
+        word_score = cosine_similarity(
+            word_matrix[0:1], word_matrix[1:2]
+        )[0][0]
+
+        char_score = cosine_similarity(
+            char_matrix[0:1], char_matrix[1:2]
+        )[0][0]
+
+        return round(float((0.6 * word_score) + (0.4 * char_score)), 4)
+
     except Exception:
         return 0.0
 
@@ -662,7 +697,7 @@ def run_hybrid_analysis(
         phrase_list         list[str]  matched phrases
         sentence_score      float 0-1
         semantic_score      float 0-1
-        semantic_available  bool       False when sentence-transformers not installed
+        semantic_available  bool       Always True (lightweight paraphrase similarity, no optional dep)
         style_score         float 0-1
         style_features_new  dict       style fingerprint of new submission
         feedback_weight     float 0-1
@@ -676,9 +711,8 @@ def run_hybrid_analysis(
     phrase_score, phrase_list = _phrase_match_score(new_text, matched_text)
     sentence_score  = _sentence_similarity_score(new_text, matched_text, threshold=0.75)
     semantic_score  = _semantic_similarity_score(new_text, matched_text)
-    semantic_avail  = semantic_score > 0.0   # False when library missing
-    # Fall back to TF-IDF for the semantic slot when library is unavailable
-    sem_for_weight  = semantic_score if semantic_avail else tfidf_score
+    # Lightweight paraphrase similarity — always available (pure scikit-learn, no optional deps)
+    sem_for_weight  = semantic_score
     style_score     = _style_mismatch_score(new_text, student_id)
     fb_weight       = _feedback_weight(tfidf_score)
 
@@ -715,7 +749,7 @@ def run_hybrid_analysis(
         "phrase_list":        phrase_list,
         "sentence_score":     sentence_score,
         "semantic_score":     semantic_score,
-        "semantic_available": semantic_avail,
+        "semantic_available": True,   # always True — no torch/transformers dependency
         "style_score":        style_score,
         "style_features_new": new_style,
         "feedback_weight":    fb_weight,

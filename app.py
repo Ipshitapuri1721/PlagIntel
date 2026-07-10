@@ -536,21 +536,12 @@ with tab_analyse:
                       help="30% weight — fraction of submission covered by exact 5+ word phrases.")
             s2.metric("Sentence Sim.",    f"{hybrid['sentence_score']*100:.1f}%",
                       help="25% weight — fraction of sentences with TF-IDF similarity ≥ 0.75.")
-            sem_label = (f"{hybrid['semantic_score']*100:.1f}%"
-                         if hybrid["semantic_available"] else "N/A*")
-            s3.metric("Semantic Sim.",    sem_label,
-                      help="25% weight — embedding cosine similarity (requires sentence-transformers).")
+            s3.metric("Semantic Sim.",    f"{hybrid['semantic_score']*100:.1f}%",
+                      help="25% weight — Lightweight paraphrase similarity (word + char TF-IDF n-grams, pure scikit-learn, CPU-safe).")
             s4.metric("Style Mismatch",   f"{hybrid['style_score']*100:.1f}%",
                       help="10% weight — deviation from this student's past writing style.")
             s5.metric("Feedback Weight",  f"{hybrid['feedback_weight']*100:.1f}%",
                       help="10% weight — adjusted by past teacher decisions at similar scores.")
-
-            if not hybrid["semantic_available"]:
-                st.caption(
-                    "\\* Semantic similarity requires `sentence-transformers`. "
-                    "Install it with `pip install sentence-transformers` for paraphrase detection. "
-                    "TF-IDF score is used in its place for weighting."
-                )
 
         # ── Risk badge + bar ──────────────────────────────────────────────────
         if hybrid:

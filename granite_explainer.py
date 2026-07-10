@@ -14,13 +14,6 @@ WATSONX_API_KEY  = os.getenv("WATSONX_API_KEY", "")
 WATSONX_URL      = os.getenv("WATSONX_URL", "https://us-south.ml.cloud.ibm.com")
 WATSONX_PROJECT  = os.getenv("WATSONX_PROJECT_ID", "")
 
-if WATSONX_API_KEY:
-    print("API KEY:", WATSONX_API_KEY[:8] + "...")
-else:
-    print("API KEY: Missing")
-print("PROJECT ID:", WATSONX_PROJECT or "Missing")
-print("URL:", WATSONX_URL)
-
 GRANITE_MODEL_ID = "ibm/granite-4-h-small"
 
 GENERATION_PARAMS = {
@@ -65,8 +58,9 @@ def build_prompt(
     if hybrid_scores:
         sem_line = (
             f"  Semantic similarity    : {hybrid_scores['semantic_score']*100:.1f}%"
+            f" (lightweight paraphrase similarity)"
             if hybrid_scores.get("semantic_available")
-            else "  Semantic similarity    : N/A (sentence-transformers not installed)"
+            else "  Semantic similarity    : N/A"
         )
         hybrid_block = f"""
 HYBRID DETECTION SCORES (use as additional context):
