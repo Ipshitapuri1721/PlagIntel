@@ -1,0 +1,83 @@
+timestamp,student_id,student_name,assignment_title,similarity_score,risk_level,teacher_decision,teacher_notes,granite_summary,top_matching_student,top_matching_assignment
+2026-07-10 03:04,S012,Ipshita Puri,data science,0.389,🟢 Low Risk,Genuine,,"---------------------------------------------------------------------
+
+## Start your response below -----------------------------------------------------------------------
+
+## Case Summary
+On {date}, a student submitted a data‑science assignment describing the concepts of *supervised learning*, *ensemble methods* and *reinforcement learning*. After passing the submission through a similarity detector, it returned a **38.9 %** match to a generic reference article titled *""Reinforcement Learning and Control""*.
+
+The overlap falls in the **Low‑Risk (⏺️🟢)** range—enough duplicated wording to warrant investigation, but not enough to conclude deliberate misconduct.
+
+## Why the Texts Are Similar
+Both documents cover three core topics in computer‑science / data‑science courses:
+
+| Shared Topic | How the Overlap Appears |
+|--------------|--------------------------|
+| **Supervised learning basics** | Nearly identical introductory paragraphs defining labelled data and listing classic primitives such as *linear/logistic regression, k‑nearest neighbours, Naïve Bayes,* and *decision trees.* |
+| **Generative vs primitive algorithms** | Parallel sentences introduce Naïve Bayes, Gaussian mixture models, Hidden Markov Models and defining traits (“learn probability distribution”, “generates new samples”). |
+| **Judicial‑tone guidance** | Structured headings (*Case Summary, Why the Texts Are Similar…*) plus list‑style formatting mirror each other closely. |
+
+Thus, the papers overlap wherever the course material dictates discussion of these familiar sub‑fields—not because any external source was consulted.
+
+## Suspicious Matching Phrases  
+Below are five notable excerpts that recur word‑for‑word or with negligible variation in both documents:
+
+> • ""Supervised learning""
+> > (Appears unchanged in both submissions.)
+
+> • ""Student Submission""</code></pre>
+> > Exact string enclosed in `“` marks.
+
+> • ”Online Shopping”
+> > Identical in title/section name.
+
+> • ”Copy Type”
+> > Information block heading copied identically.
+
+> • ”Teacher Recommendation”
+> > Section heading replicated precisely.
+
+*(If you wish strict phrasing, note the rest of the matched content is primarily conceptual prose that mirrors the tutor‑provided outline.)*
+
+## Copy Type
+**Heavy Paraphrasing**  
+The submitted text reproduces **identifiable module headers** (`Case Summary`, `Why the Texts Are Similar`, `Suspicious Matching Phases`) **and numeric thresholds** (state colour codes 🟢). Yet the surrounding explanations reflect common instructional templates taught in undergraduate curricula. Instructors routinely hand out skeleton outlines to scaffold essays, leading to predictable structural echoes. Consequently, the similarity stems chiefly from reuse of standard pedagogical framing rather than wholesale copying.
+
+## Teacher Recommendation
+Ask the student to submit a brief verbal explanation of two concrete bullets—an example of *direct copy* versus an instance of *common‑knowledge analogy*. This exercise forces the writer to differentiate paraphrasing intents themselves, confirm understanding, and supply factual",,
+2026-07-10 13:14,23010503025,jack,essay on climate change,0.3342,🟢 Low Risk,Genuine,,"- The Report Header (“Plagiarism Detection Report”) will not be included; begin directly with “## Case Summary”.
+
+--- 
+
+*Please adhere exactly to all instructions.*
+
+## Case Summary
+The submission exhibits *low overall risk* according to the weighted hybrid detection scores (Weighted Final Score: **19.6%**, AI‑Assisted Likelihood: **Low**). While semantic similarity is moderate at 75.9%, there are **no exact matched phrases** between the student work and the compared text. Vocabulary-wise, both discuss core climate‑change concepts—global warming, greenhouse gases, impacts—but do so using different wording. The teacher should verify whether the resemblance stems from genuine independent research or inadvertent reuse of common terminology; further investigation beyond lexical comparison (e.g., citation check) would clarify intent.
+
+## Reason for Similarity
+Both texts cover broad introductory aspects of climate change – definitions, causes (greenhouse gases), and consequences (extreme weather, ecological/natural resource harms)—but express each point with distinct verbs and phrasings. The student essay uses longer paragraphs describing multifaceted impacts, while the prior example offers concise statements emphasizing “since the 1800s” and direct causation language absent from the submission. Consequently, shared terms (e.g., “climate change,” “greenhouse gases,” “human activities”) arise because they belong to commonly accepted scientific descriptors rather than copied construction.
+
+## Matching Concepts
+- Definition of climate change  
+- Primary drivers: increased greenhouse gases  
+- Impacts: ecosystem disruption, agricultural stressors, public‑health risks  
+
+Each of these high‑level themes recurs across both writings.
+
+## Suspicious Matching Phrases
+> No exact matching phrase found.
+
+No verbatim quotations exist between submissions; detected similarities arise purely from conceptual overlap expressed through unique word choice.
+
+## Potential Cause
+**Independent paraphrasing of the same source**   
+Both understandings likely originate from widely taught basics about climate change, where general facts (definition, GHG link, impacts) represent common publicly accessible information—not specialized original content requiring attribution.
+
+## Copy Type
+**Low Concern**  
+Hybrid detection flags some semantic likeness, yet none translates into textual duplication sufficient to imply intentional borrowing—or even accidental unattributed copying—given lack of overt mirroring or substantially repeated structures.
+
+## Teacher Recommendation
+Encourage students to include brief citations when presenting well‑known background information, especially after drawing from instruction materials, textbooks, or internet summaries. This practice reinforces ethical habits without penalizing appropriate assimilation of foundational subject matter familiar to peers and instructors alike.
+
+**Confidence Score:** **Medium** — Hybrid metrics reflect noteworthy thematic affinity yet supply zero concrete evidence of lifted exact passages, leaving credible space open for innocent coincidence rooted within broadly disseminated factual material typical of entry‑level coursework.",Alice Johnson,Essay on Climate Change
