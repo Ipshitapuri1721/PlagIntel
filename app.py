@@ -35,6 +35,72 @@ from analytics  import render_analytics   # NEW: dedicated analytics tab
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# File extraction helper
+# ══════════════════════════════════════════════════════════════════════════════
+
+def extract_text_from_file(uploaded_file) -> tuple[str, str]:
+    """
+    Extract plain text from a Streamlit UploadedFile object.
+
+    Supports TXT, PDF (via pypdf), and DOCX (via python-docx).
+    Uses only pure-Python libraries — no native DLLs, no CUDA, no PyMuPDF/fitz.
+
+    Returns
+    -------
+    (text, error_message)
+        text          — extracted text string (empty string on failure)
+        error_message — human-readable error string, or "" on success
+    """
+    file_ext = uploaded_file.name.rsplit(".", 1)[-1].lower()
+
+    # ── TXT ───────────────────────────────────────────────────────────────────
+    if file_ext == "txt":
+        try:
+            return uploaded_file.read().decode("utf-8"), ""
+        except UnicodeDecodeError:
+            try:
+                uploaded_file.seek(0)
+                return uploaded_file.read().decode("latin-1"), ""
+            except Exception:
+                return "", "Unable to read the TXT file. Please ensure it is plain text."
+
+    # ── PDF ───────────────────────────────────────────────────────────────────
+    elif file_ext == "pdf":
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(uploaded_file.read()))
+            pages  = []
+            for page in reader.pages:
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    pages.append(page_text.strip())
+            text = "\n\n".join(pages).strip()
+            if not text:
+                return "", (
+                    "This PDF appears to contain scanned images with no selectable text. "
+                    "OCR software would be required to extract text from it."
+                )
+            return text, ""
+        except Exception as exc:
+            return "", f"Unable to read the PDF. ({type(exc).__name__})"
+
+    # ── DOCX ──────────────────────────────────────────────────────────────────
+    elif file_ext == "docx":
+        try:
+            from docx import Document
+            doc  = Document(io.BytesIO(uploaded_file.read()))
+            text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+            return text, ""
+        except Exception as exc:
+            return "", f"The uploaded DOCX file could not be read. ({type(exc).__name__})"
+
+    # ── Unsupported ───────────────────────────────────────────────────────────
+    else:
+        return "", f"Unsupported file format: .{file_ext}"
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Page configuration
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -315,39 +381,18 @@ with tab_analyse:
                 type=["txt", "pdf", "docx"],
             )
             if uploaded_file is not None:
-                file_ext = uploaded_file.name.rsplit(".", 1)[-1].lower()
-                try:
-                    if file_ext == "txt":
-                        assignment_text = uploaded_file.read().decode("utf-8")
-
-                    elif file_ext == "pdf":
-                        import fitz  # PyMuPDF
-                        pdf_bytes = uploaded_file.read()
-                        pdf_doc   = fitz.open(stream=pdf_bytes, filetype="pdf")
-                        pages     = [page.get_text() for page in pdf_doc]
-                        pdf_doc.close()
-                        assignment_text = "\n".join(pages).strip()
-
-                    elif file_ext == "docx":
-                        from docx import Document
-                        doc_bytes = io.BytesIO(uploaded_file.read())
-                        doc       = Document(doc_bytes)
-                        assignment_text = "\n".join(
-                            p.text for p in doc.paragraphs if p.text.strip()
+                assignment_text, extract_error = extract_text_from_file(uploaded_file)
+                if extract_error:
+                    st.error(extract_error)
+                elif assignment_text.strip():
+                    st.success(f"✅ File uploaded: {uploaded_file.name}")
+                    with st.expander("Preview extracted text"):
+                        st.write(
+                            assignment_text[:800]
+                            + ("…" if len(assignment_text) > 800 else "")
                         )
-
-                    if assignment_text.strip():
-                        st.success(f"✅ File uploaded: {uploaded_file.name}")
-                        with st.expander("Preview extracted text"):
-                            st.write(
-                                assignment_text[:800]
-                                + ("…" if len(assignment_text) > 800 else "")
-                            )
-                    else:
-                        st.warning("No text could be extracted. Please check the file.")
-
-                except Exception as extract_err:
-                    st.error(f"Could not read file: {extract_err}")
+                else:
+                    st.warning("No text could be extracted. Please check the file.")
 
     # ── Analyse button ────────────────────────────────────────────────────────
 
