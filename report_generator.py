@@ -33,6 +33,26 @@ def _top_match_lines(top_matches: list[dict]) -> list[str]:
 
 # ── TXT Report ────────────────────────────────────────────────────────────────
 
+def _token_lines(token_usage: dict | None) -> list[str]:
+    """Build the shared IBM Granite Token Usage block for TXT/PDF reports."""
+    if not token_usage or token_usage.get("total_tokens", 0) == 0:
+        return [
+            "IBM GRANITE TOKEN USAGE",
+            "-" * 64,
+            "  Token usage unavailable (offline fallback was used).",
+            "",
+        ]
+    return [
+        "IBM GRANITE TOKEN USAGE",
+        "-" * 64,
+        f"  Input Tokens   : {token_usage.get('input_tokens',  0)}",
+        f"  Output Tokens  : {token_usage.get('output_tokens', 0)}",
+        f"  Total Tokens   : {token_usage.get('total_tokens',  0)}",
+        f"  Model ID       : {token_usage.get('model_id',      'N/A')}",
+        "",
+    ]
+
+
 def generate_txt_report(
     student_id: str,
     student_name: str,
@@ -44,12 +64,13 @@ def generate_txt_report(
     teacher_decision: str = "",
     teacher_notes: str = "",
     submission_time: str = "",
+    token_usage: dict | None = None,
 ) -> str:
     """
     Build a professional plain-text plagiarism report.
     Suitable for st.download_button with mime='text/plain'.
     Includes: student info, similarity, risk, top-5 matches,
-    Granite summary, teacher decision, recommendation, timestamp.
+    Granite summary, token usage, teacher decision, recommendation, timestamp.
     """
     sep  = "=" * 64
     dash = "-" * 64
@@ -97,6 +118,8 @@ def generate_txt_report(
         lines.append(wrapped)
     lines.append("")
 
+    lines += _token_lines(token_usage)
+
     if teacher_decision:
         lines += [
             "TEACHER DECISION",
@@ -131,6 +154,7 @@ def generate_csv_report(
     teacher_decision: str = "",
     teacher_notes: str = "",
     submission_time: str = "",
+    token_usage: dict | None = None,
 ) -> str:
     """
     Build a structured CSV report.
@@ -178,6 +202,18 @@ def generate_csv_report(
     writer.writerow([granite_summary.replace("\n", " | ")])
     writer.writerow([])
 
+    # Token usage
+    writer.writerow(["IBM GRANITE TOKEN USAGE"])
+    tu = token_usage or {}
+    writer.writerow(["Input Tokens", "Output Tokens", "Total Tokens", "Model ID"])
+    writer.writerow([
+        tu.get("input_tokens",  0),
+        tu.get("output_tokens", 0),
+        tu.get("total_tokens",  0),
+        tu.get("model_id",      "N/A"),
+    ])
+    writer.writerow([])
+
     # Recommendation
     rec_map = {
         "High":   "Escalate to academic integrity committee.",
@@ -204,6 +240,7 @@ def generate_pdf_report(
     teacher_decision: str = "",
     teacher_notes: str = "",
     submission_time: str = "",
+    token_usage: dict | None = None,
 ) -> bytes:
     """
     Generate a PDF report.
@@ -219,7 +256,7 @@ def generate_pdf_report(
             student_id, student_name, assignment_title,
             similarity_score, risk_level, top_matches,
             granite_summary, teacher_decision, teacher_notes,
-            submission_time,
+            submission_time, token_usage,
         )
     except ImportError:
         pass  # reportlab not installed — use fallback
@@ -229,7 +266,7 @@ def generate_pdf_report(
         student_id, student_name, assignment_title,
         similarity_score, risk_level, top_matches,
         granite_summary, teacher_decision, teacher_notes,
-        submission_time,
+        submission_time, token_usage,
     )
     return _txt_to_minimal_pdf(txt)
 
@@ -238,7 +275,7 @@ def _pdf_reportlab(
     student_id, student_name, assignment_title,
     similarity_score, risk_level, top_matches,
     granite_summary, teacher_decision, teacher_notes,
-    submission_time,
+    submission_time, token_usage=None,
 ) -> bytes:
     """Build a proper PDF using reportlab (optional dependency)."""
     from reportlab.lib.pagesizes import A4
@@ -335,6 +372,35 @@ def _pdf_reportlab(
             story.append(Paragraph(line, body))
 
     story.append(Spacer(1, 0.3*cm))
+
+    # Token usage table
+    tu = token_usage or {}
+    tok_data = [
+        ["Input Tokens", "Output Tokens", "Total Tokens", "Model ID"],
+        [
+            str(tu.get("input_tokens",  0)),
+            str(tu.get("output_tokens", 0)),
+            str(tu.get("total_tokens",  0)),
+            str(tu.get("model_id",      "N/A")),
+        ],
+    ]
+    tok_table = Table(tok_data, colWidths=[3.5*cm, 3.5*cm, 3.5*cm, 6*cm])
+    tok_table.setStyle(TableStyle([
+        ("BACKGROUND",  (0,0), (-1,0), IBM_BLUE_RL),
+        ("TEXTCOLOR",   (0,0), (-1,0), colors.white),
+        ("FONTNAME",    (0,0), (-1,0), "Helvetica-Bold"),
+        ("FONTSIZE",    (0,0), (-1,-1), 9),
+        ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#f4f4f4")]),
+        ("GRID",        (0,0), (-1,-1), 0.3, colors.HexColor("#e0e0e0")),
+        ("VALIGN",      (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING",  (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING",(0,0),(-1,-1), 4),
+    ]))
+    story += [
+        Paragraph("IBM Granite Token Usage", h2),
+        tok_table,
+        Spacer(1, 0.3*cm),
+    ]
 
     if teacher_decision:
         story += [

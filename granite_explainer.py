@@ -149,16 +149,34 @@ def explain_with_granite(
     similarity_score: float,
     risk_level: str,
     learning_context: str = "",
-    hybrid_scores: dict | None = None,   # NEW: passed through to build_prompt()
-) -> str:
+    hybrid_scores: dict | None = None,
+) -> dict:
     """
-    Call IBM Granite on watsonx.ai and return the structured case report.
-    Injects historical learning context and hybrid sub-scores when available.
-    Falls back to the offline rule-based explainer when credentials are absent.
+    Call IBM Granite on watsonx.ai and return a result dict.
+
+    Uses model.generate() (not generate_text) so the full API response is
+    available, including token-usage fields.
+
+    Return schema
+    -------------
+    {
+        "text":          str   — the structured Markdown case report
+        "input_tokens":  int   — tokens consumed by the prompt
+        "output_tokens": int   — tokens generated in the response
+        "total_tokens":  int   — input_tokens + output_tokens
+        "model_id":      str   — the model that produced the response
+    }
+
+    Falls back to the offline rule-based explainer when credentials are absent
+    or when the API call fails. Token counts are 0 in the offline case.
     """
     if not WATSONX_API_KEY or not WATSONX_PROJECT:
-        return _offline_explanation(new_text, matched_text, similarity_score, risk_level,
-                                    hybrid_scores=hybrid_scores)
+        return _make_result(
+            _offline_explanation(new_text, matched_text, similarity_score,
+                                 risk_level, hybrid_scores=hybrid_scores),
+            input_tokens=0, output_tokens=0,
+            model_id="Offline fallback",
+        )
 
     try:
         from ibm_watsonx_ai import Credentials
@@ -173,15 +191,42 @@ def explain_with_granite(
         )
         prompt   = build_prompt(new_text, matched_text, similarity_score,
                                 risk_level, learning_context, hybrid_scores)
-        response = model.generate_text(prompt=prompt)
-        return response.strip()
+        response = model.generate(prompt=prompt)
+
+        # Extract text and token counts safely — use .get() so missing fields
+        # never crash the app.
+        result_block   = response.get("results", [{}])[0]
+        generated_text = result_block.get("generated_text", "").strip()
+        input_tokens   = int(result_block.get("input_token_count",   0))
+        output_tokens  = int(result_block.get("generated_token_count", 0))
+
+        return _make_result(generated_text, input_tokens, output_tokens,
+                            model_id=GRANITE_MODEL_ID)
 
     except Exception as error:
-        return (
-            f"⚠️ IBM Granite could not be reached.\n\nError: {error}\n\n"
-            + _offline_explanation(new_text, matched_text, similarity_score, risk_level,
-                                   hybrid_scores=hybrid_scores)
+        # Log a short, safe message — do NOT surface the raw exception (may
+        # contain project IDs or partial credential info).
+        safe_msg = type(error).__name__
+        offline_text = (
+            f"⚠️ IBM Granite could not be reached ({safe_msg}). "
+            f"Showing offline analysis below.\n\n"
+            + _offline_explanation(new_text, matched_text, similarity_score,
+                                   risk_level, hybrid_scores=hybrid_scores)
         )
+        return _make_result(offline_text, input_tokens=0, output_tokens=0,
+                            model_id="Offline fallback")
+
+
+def _make_result(text: str, input_tokens: int, output_tokens: int,
+                 model_id: str) -> dict:
+    """Assemble the standard return dict from granite_explainer."""
+    return {
+        "text":          text,
+        "input_tokens":  input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens":  input_tokens + output_tokens,
+        "model_id":      model_id,
+    }
 
 
 # ── Offline fallback ──────────────────────────────────────────────────────────
@@ -317,4 +362,23 @@ def _offline_explanation(
         f"---\n"
         f"_⚙️ Offline analysis — add `WATSONX_API_KEY` and `WATSONX_PROJECT_ID` "
         f"to a `.env` file to enable live IBM Granite explanations._"
+    )
+
+
+# ── No-match fallback (first submission in DB) ────────────────────────────────
+
+def first_submission_result() -> dict:
+    """
+    Return a well-formed result dict for the case where there are no stored
+    submissions to compare against (first-ever submission).
+    Token counts are 0 because no Granite call is needed.
+    """
+    return _make_result(
+        text=(
+            "## Case Summary\nNo previous submissions found to compare against. "
+            "This appears to be the first submission in the database.\n\n"
+            "## Teacher Recommendation\nStore this submission as a baseline."
+        ),
+        input_tokens=0, output_tokens=0,
+        model_id="N/A — no comparison available",
     )

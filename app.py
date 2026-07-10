@@ -17,7 +17,7 @@ from plagiarism_engine import (
     highlight_matches,
     run_hybrid_analysis,    # NEW: hybrid detection engine
 )
-from granite_explainer import explain_with_granite
+from granite_explainer import explain_with_granite, first_submission_result
 from history_manager import (
     load_history,
     record_analysis,
@@ -448,21 +448,17 @@ with tab_analyse:
             learning_ctx = get_learning_context()
             hybrid       = st.session_state["hybrid_result"]
             with st.spinner("🤖 Step 4: Asking IBM Granite to analyse the findings…"):
-                explanation = explain_with_granite(
+                granite_result = explain_with_granite(
                     new_text         = assignment_text.strip(),
                     matched_text     = overall["top_match"]["matched_text"],
                     similarity_score = overall["top_match"]["similarity_score"],
                     risk_level       = overall["top_match"]["risk_level"],
                     learning_context = learning_ctx,
-                    hybrid_scores    = hybrid,          # ← NEW
+                    hybrid_scores    = hybrid,
                 )
-                st.session_state["granite_explain"] = explanation
+                st.session_state["granite_explain"] = granite_result
         else:
-            st.session_state["granite_explain"] = (
-                "## Case Summary\nNo previous submissions found to compare against. "
-                "This appears to be the first submission in the database.\n\n"
-                "## Teacher Recommendation\nStore this submission as a baseline."
-            )
+            st.session_state["granite_explain"] = first_submission_result()
 
         st.session_state["step"] = 5
         st.rerun()
@@ -740,7 +736,8 @@ with tab_analyse:
 
     if st.session_state["granite_explain"] is not None:
 
-        overall = st.session_state["overall_risk"]
+        overall        = st.session_state["overall_risk"]
+        granite_result = st.session_state["granite_explain"]  # now a dict
 
         st.divider()
         st.markdown(
@@ -749,7 +746,26 @@ with tab_analyse:
         )
 
         st.markdown("### 🤖 IBM Granite Analysis")
-        st.info(st.session_state["granite_explain"])
+        st.markdown(granite_result["text"])
+
+        # ── IBM Granite Token Usage ───────────────────────────────────────────
+        st.markdown(
+            '<div style="font-size:13px;font-weight:700;color:#0f62fe;'
+            'text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px;">'
+            '🔢 IBM Granite Token Usage</div>',
+            unsafe_allow_html=True,
+        )
+        if granite_result["total_tokens"] == 0:
+            st.info(
+                "Token usage is unavailable because IBM Granite is not currently "
+                "connected. Showing offline analysis above."
+            )
+        else:
+            tc1, tc2, tc3, tc4 = st.columns(4)
+            tc1.metric("Input Tokens",  granite_result["input_tokens"])
+            tc2.metric("Output Tokens", granite_result["output_tokens"])
+            tc3.metric("Total Tokens",  granite_result["total_tokens"])
+            tc4.metric("Model",         granite_result["model_id"])
 
         # ── Multi-format download (TXT / CSV / PDF) ───────────────────────────
         st.markdown("#### 📥 Download Report")
@@ -760,7 +776,13 @@ with tab_analyse:
         s_risk       = overall["risk_level"]  if overall else ""
         s_score      = overall["max_score"]   if overall else 0.0
         s_time       = st.session_state.get("s_submit_time", "")
-        granite      = st.session_state["granite_explain"]
+        granite_text = granite_result["text"]
+        token_usage  = {
+            "input_tokens":  granite_result["input_tokens"],
+            "output_tokens": granite_result["output_tokens"],
+            "total_tokens":  granite_result["total_tokens"],
+            "model_id":      granite_result["model_id"],
+        }
 
         dl1, dl2, dl3 = st.columns(3)
 
@@ -768,8 +790,8 @@ with tab_analyse:
             txt_report = generate_txt_report(
                 student_id=s_id, student_name=s_name, assignment_title=s_title,
                 similarity_score=s_score, risk_level=s_risk,
-                top_matches=top_matches, granite_summary=granite,
-                submission_time=s_time,
+                top_matches=top_matches, granite_summary=granite_text,
+                submission_time=s_time, token_usage=token_usage,
             )
             st.download_button(
                 "📄 TXT Report",
@@ -782,8 +804,8 @@ with tab_analyse:
             csv_report = generate_csv_report(
                 student_id=s_id, student_name=s_name, assignment_title=s_title,
                 similarity_score=s_score, risk_level=s_risk,
-                top_matches=top_matches, granite_summary=granite,
-                submission_time=s_time,
+                top_matches=top_matches, granite_summary=granite_text,
+                submission_time=s_time, token_usage=token_usage,
             )
             st.download_button(
                 "📊 CSV Report",
@@ -797,8 +819,8 @@ with tab_analyse:
                 pdf_bytes = generate_pdf_report(
                     student_id=s_id, student_name=s_name, assignment_title=s_title,
                     similarity_score=s_score, risk_level=s_risk,
-                    top_matches=top_matches, granite_summary=granite,
-                    submission_time=s_time,
+                    top_matches=top_matches, granite_summary=granite_text,
+                    submission_time=s_time, token_usage=token_usage,
                 )
                 st.download_button(
                     "📑 PDF Report",
@@ -844,8 +866,9 @@ with tab_analyse:
         if save_clicked and not st.session_state["feedback_saved"]:
             feedback_value = feedback_options[selected_label]
 
-            overall  = st.session_state["overall_risk"]
-            granite  = st.session_state["granite_explain"] or ""
+            overall        = st.session_state["overall_risk"]
+            granite_result = st.session_state["granite_explain"] or {}
+            granite_text   = granite_result.get("text", "") if isinstance(granite_result, dict) else str(granite_result)
             s_id     = st.session_state["s_student_id"]
             s_name   = st.session_state["s_student_name"]
             s_title  = st.session_state["s_assign_title"]
@@ -858,6 +881,12 @@ with tab_analyse:
             top_m_student = top_m["student_name"]    if top_m else ""
             top_m_assign  = top_m["assignment_title"] if top_m else ""
 
+            # Token usage from Granite result dict
+            g_in  = granite_result.get("input_tokens",  0) if isinstance(granite_result, dict) else 0
+            g_out = granite_result.get("output_tokens", 0) if isinstance(granite_result, dict) else 0
+            g_tot = granite_result.get("total_tokens",  0) if isinstance(granite_result, dict) else 0
+            g_mid = granite_result.get("model_id",      "") if isinstance(granite_result, dict) else ""
+
             # 1. Persist submission to old_submissions.csv (extended schema)
             if s_name:
                 add_new_submission(
@@ -869,10 +898,10 @@ with tab_analyse:
                     risk_level       = s_risk,
                     teacher_feedback = feedback_value,
                     teacher_notes    = teacher_notes.strip(),
-                    granite_summary  = granite,
+                    granite_summary  = granite_text,
                 )
 
-            # 2. Permanently record in analysis_history.csv (with top-match fields)
+            # 2. Permanently record in analysis_history.csv (with top-match + token fields)
             record_analysis(
                 student_id               = s_id,
                 student_name             = s_name or "Unknown",
@@ -881,9 +910,14 @@ with tab_analyse:
                 risk_level               = s_risk,
                 teacher_decision         = feedback_value,
                 teacher_notes            = teacher_notes.strip(),
-                granite_summary          = granite,
-                top_matching_student     = top_m_student,     # NEW
-                top_matching_assignment  = top_m_assign,      # NEW
+                granite_summary          = granite_text,
+                top_matching_student     = top_m_student,
+                top_matching_assignment  = top_m_assign,
+                input_tokens             = g_in,
+                output_tokens            = g_out,
+                total_tokens             = g_tot,
+                granite_model_id         = g_mid,
+                analysis_timestamp       = s_time,
             )
 
             # 3. Update in-session feedback log
@@ -931,8 +965,15 @@ with tab_analyse:
         )
 
         # Final complete report download with teacher decision included
-        overall     = st.session_state["overall_risk"]
-        granite     = st.session_state["granite_explain"] or ""
+        overall        = st.session_state["overall_risk"]
+        granite_result = st.session_state["granite_explain"] or {}
+        granite_text   = granite_result.get("text", "") if isinstance(granite_result, dict) else str(granite_result)
+        token_usage    = {
+            "input_tokens":  granite_result.get("input_tokens",  0) if isinstance(granite_result, dict) else 0,
+            "output_tokens": granite_result.get("output_tokens", 0) if isinstance(granite_result, dict) else 0,
+            "total_tokens":  granite_result.get("total_tokens",  0) if isinstance(granite_result, dict) else 0,
+            "model_id":      granite_result.get("model_id",      "") if isinstance(granite_result, dict) else "",
+        }
         top_matches = overall.get("top_matches", []) if overall else []
         s_name      = last["student_name"]
         s_time      = st.session_state.get("s_submit_time", "")
@@ -944,10 +985,11 @@ with tab_analyse:
             similarity_score = overall["max_score"] if overall else 0.0,
             risk_level       = last["risk_level"],
             top_matches      = top_matches,
-            granite_summary  = granite,
+            granite_summary  = granite_text,
             teacher_decision = last["feedback"],
             teacher_notes    = last["notes"],
             submission_time  = s_time,
+            token_usage      = token_usage,
         )
 
         fc1, fc2 = st.columns(2)
@@ -966,10 +1008,11 @@ with tab_analyse:
                 similarity_score = overall["max_score"] if overall else 0.0,
                 risk_level       = last["risk_level"],
                 top_matches      = top_matches,
-                granite_summary  = granite,
+                granite_summary  = granite_text,
                 teacher_decision = last["feedback"],
                 teacher_notes    = last["notes"],
                 submission_time  = s_time,
+                token_usage      = token_usage,
             )
             st.download_button(
                 "📊 Download Final CSV Report",

@@ -10,8 +10,8 @@ from datetime import datetime
 
 HISTORY_FILE = "data/analysis_history.csv"
 
-# All columns — extended with top_matching_student and top_matching_assignment
-# so reports and analytics can show who matched whom without re-running TF-IDF.
+# All columns — extended with top_matching_student, top_matching_assignment,
+# and Granite token-usage fields.
 HISTORY_COLUMNS = [
     "timestamp",
     "student_id",
@@ -22,9 +22,24 @@ HISTORY_COLUMNS = [
     "teacher_decision",
     "teacher_notes",
     "granite_summary",
-    "top_matching_student",      # NEW: name of the most-similar stored student
-    "top_matching_assignment",   # NEW: assignment title of the top match
+    "top_matching_student",      # name of the most-similar stored student
+    "top_matching_assignment",   # assignment title of the top match
+    # Granite token-usage fields (0 when offline fallback was used)
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "granite_model_id",
+    "analysis_timestamp",
 ]
+
+# Default values for back-filling missing columns in older CSV files
+_COLUMN_DEFAULTS = {
+    "input_tokens":       0,
+    "output_tokens":      0,
+    "total_tokens":       0,
+    "granite_model_id":   "",
+    "analysis_timestamp": "",
+}
 
 
 # ── Load / Save helpers ───────────────────────────────────────────────────────
@@ -32,14 +47,15 @@ HISTORY_COLUMNS = [
 def load_history() -> pd.DataFrame:
     """
     Load the full analysis history from CSV.
-    Back-fills any new columns so older CSV files continue to work.
+    Back-fills any new columns so older CSV files continue to work,
+    using sensible defaults (0 for numeric token fields, "" for strings).
     """
     os.makedirs("data", exist_ok=True)
     try:
         df = pd.read_csv(HISTORY_FILE)
         for col in HISTORY_COLUMNS:
             if col not in df.columns:
-                df[col] = ""
+                df[col] = _COLUMN_DEFAULTS.get(col, "")
         return df[HISTORY_COLUMNS]
     except FileNotFoundError:
         return pd.DataFrame(columns=HISTORY_COLUMNS)
@@ -64,10 +80,16 @@ def record_analysis(
     granite_summary: str = "",
     top_matching_student: str = "",
     top_matching_assignment: str = "",
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    total_tokens: int = 0,
+    granite_model_id: str = "",
+    analysis_timestamp: str = "",
 ) -> None:
     """
     Append one permanent analysis record to analysis_history.csv.
     Called after the teacher saves feedback so all fields are populated.
+    Includes Granite token-usage fields for cumulative reporting.
     Never overwrites previous records — always appends.
     """
     df = load_history()
@@ -83,6 +105,11 @@ def record_analysis(
         "granite_summary":         granite_summary,
         "top_matching_student":    top_matching_student,
         "top_matching_assignment": top_matching_assignment,
+        "input_tokens":            int(input_tokens),
+        "output_tokens":           int(output_tokens),
+        "total_tokens":            int(total_tokens),
+        "granite_model_id":        granite_model_id,
+        "analysis_timestamp":      analysis_timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }])
     df = pd.concat([df, new_row], ignore_index=True)
     _save_history(df)
@@ -92,13 +119,15 @@ def record_analysis(
 
 def get_feedback_stats(df: pd.DataFrame | None = None) -> dict:
     """
-    Compute comprehensive teacher-decision and risk statistics from history.
+    Compute comprehensive teacher-decision, risk, and token-usage statistics.
 
     Returns a dict with keys:
         total, genuine, suspicious, confirmed, false_positive,
         high_risk, medium_risk, low_risk,
         avg_similarity, avg_confirmed_similarity, avg_fp_similarity,
-        last_review, teacher_accuracy
+        last_review, teacher_accuracy,
+        total_input_tokens, total_output_tokens, total_tokens_used,
+        avg_tokens_per_analysis
     """
     if df is None:
         df = load_history()
@@ -112,6 +141,10 @@ def get_feedback_stats(df: pd.DataFrame | None = None) -> dict:
         "avg_fp_similarity": 0.0,
         "last_review": "—",
         "teacher_accuracy": "—",
+        "total_input_tokens":    0,
+        "total_output_tokens":   0,
+        "total_tokens_used":     0,
+        "avg_tokens_per_analysis": 0,
     }
     if df.empty:
         return empty
@@ -136,6 +169,16 @@ def get_feedback_stats(df: pd.DataFrame | None = None) -> dict:
     timestamps = pd.to_datetime(df["timestamp"], errors="coerce").dropna()
     last_review = timestamps.max().strftime("%Y-%m-%d %H:%M") if not timestamps.empty else "—"
 
+    # ── Token-usage aggregates ────────────────────────────────────────────────
+    tok_in  = pd.to_numeric(df.get("input_tokens",  0), errors="coerce").fillna(0)
+    tok_out = pd.to_numeric(df.get("output_tokens", 0), errors="coerce").fillna(0)
+    tok_tot = pd.to_numeric(df.get("total_tokens",  0), errors="coerce").fillna(0)
+    total_in  = int(tok_in.sum())
+    total_out = int(tok_out.sum())
+    total_tok = int(tok_tot.sum())
+    analyses_with_tokens = int((tok_tot > 0).sum())
+    avg_tok = round(total_tok / analyses_with_tokens) if analyses_with_tokens > 0 else 0
+
     return {
         "total":                    len(df),
         "genuine":                  int((decisions == "Genuine").sum()),
@@ -150,6 +193,10 @@ def get_feedback_stats(df: pd.DataFrame | None = None) -> dict:
         "avg_fp_similarity":        round(avg_fp, 1),
         "last_review":              last_review,
         "teacher_accuracy":         accuracy,
+        "total_input_tokens":       total_in,
+        "total_output_tokens":      total_out,
+        "total_tokens_used":        total_tok,
+        "avg_tokens_per_analysis":  avg_tok,
     }
 
 

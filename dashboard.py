@@ -162,6 +162,22 @@ def render_dashboard():
     _card(m2, "Avg Confirmed Sim.",     f"{stats['avg_confirmed_similarity']}%", IBM_RED, "📈")
     _card(m3, "Teacher Accuracy",       stats["teacher_accuracy"],            IBM_GREEN,  "🎯")
 
+    st.markdown("<div style='margin:10px 0'></div>", unsafe_allow_html=True)
+
+    # ── Row 4: Granite token summary (5 columns) ─────────────────────────────
+    st.markdown(
+        '<div style="font-size:13px;font-weight:700;color:#0f62fe;'
+        'text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">'
+        '🔢 IBM Granite Token Usage Summary</div>',
+        unsafe_allow_html=True,
+    )
+    t1, t2, t3, t4, t5 = st.columns(5)
+    _card(t1, "Total Granite Analyses",   stats["total"],                      IBM_PURPLE, "🤖")
+    _card(t2, "Total Input Tokens",       f"{stats['total_input_tokens']:,}",  IBM_BLUE,   "📥")
+    _card(t3, "Total Output Tokens",      f"{stats['total_output_tokens']:,}", IBM_TEAL,   "📤")
+    _card(t4, "Total Tokens Used",        f"{stats['total_tokens_used']:,}",   IBM_ORANGE, "🔢")
+    _card(t5, "Avg Tokens / Analysis",    stats["avg_tokens_per_analysis"],    IBM_GREEN,  "📊")
+
     if df.empty:
         st.divider()
         st.info("No analysis history yet. Complete a submission review to populate the dashboard.")
